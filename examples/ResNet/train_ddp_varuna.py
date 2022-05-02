@@ -1,4 +1,5 @@
 import os
+import argparse
 from platform import node
 import sys
 import torch
@@ -15,6 +16,14 @@ import time
 
 from varuna import Varuna
 
+parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+
+parser.add_argument('--rank', default=-1, type=int, help='node rank for distributed training')
+parser.add_argument('--chunk_size', default=-1, type=int, help='micro batch size')
+parser.add_argument('--batch-size', default=-1, type=int, help='per process batch size')
+parser.add_argument('--stage_to_rank_map', default=None, type=str, help='stage to rank map of Varuna model')
+parser.add_argument('--local_rank', default=-1, type=int, help='process rank in the local node')
+parser.add_argument('--world-size', default=-1, type=int, help='number of nodes for distributed training')
 
 class ResNet_Varuna(torch.nn.Module):
     def __init__(self):
@@ -36,13 +45,16 @@ def setup(backend, dist_url, rank, world_size):
 def cleanup():
     dist.destroy_process_group()
 
-def varuna_train(local_rank, world_size, batch_size=32, stage_to_rank_map="0;", chunk_size=32, num_epochs=1): # how to set batch size, chunk size?
+def varuna_train(args): # how to set batch size, chunk size?
 
-    print("local rank is: ", local_rank, ", world size is: ", world_size)
+    num_epochs = 1
+    print("rank is: ", args.rank, ", world size is: ", args.world_size)
     dist_url = "env://"
     dist_backend = "gloo"
     
-    setup(dist_backend, dist_url, local_rank, world_size)
+    setup(dist_backend, dist_url, args.rank, args.world_size)
+
+    print("batch size is: ", args.batch_size, " chunk size is: ", args.chunk_size)
 
     print("Configure dataset")
 
@@ -63,7 +75,7 @@ def varuna_train(local_rank, world_size, batch_size=32, stage_to_rank_map="0;", 
     train_sampler = None
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=(train_sampler is None), # ???????????????????
+        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None), # ???????????????????
         num_workers=8, pin_memory=True, sampler=train_sampler)
 
     print("Configure Varuna Model")
@@ -80,9 +92,9 @@ def varuna_train(local_rank, world_size, batch_size=32, stage_to_rank_map="0;", 
             print(inputs["inputs"].size(), inputs["target"].size())
             return inputs
         
-    model = Varuna(model, stage_to_rank_map, get_batch_fn, 
-                    batch_size, chunk_size, fp16=False, 
-                    local_rank=-1, device=-1) # how are these set?
+    model = Varuna(model, args.stage_to_rank_map, get_batch_fn, 
+                    args.batch_size, args.chunk_size, fp16=False, 
+                    local_rank=args.local_rank, device=-1) # how are these set?
 
 
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1,
@@ -106,8 +118,6 @@ def varuna_train(local_rank, world_size, batch_size=32, stage_to_rank_map="0;", 
 
         for i, (images, target) in enumerate(train_loader):
 
-            if i==10:
-                break
             #if args.gpu is not None:
             #    images = images.cuda(args.gpu, non_blocking=True)
             #    target = target.cuda(args.gpu, non_blocking=True)
@@ -133,6 +143,6 @@ def varuna_train(local_rank, world_size, batch_size=32, stage_to_rank_map="0;", 
 
 if __name__ == "__main__":
 
-    world_size=1
-    mp.set_start_method("spawn")
-    mp.spawn(varuna_train,args=(world_size,),nprocs=world_size)                                      
+    args = parser.parse_args()
+    #mp.set_start_method("spawn")
+    varuna_train(args)                                     
