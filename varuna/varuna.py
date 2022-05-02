@@ -273,9 +273,12 @@ class Varuna(Module):
         self.config["make_logfile"] = bool(self.config["make_logfile"] and self.current_step < 5)
         batch_time = time.time()
 
+
+        print("schedule is: ", self.schedule)
         self.pipeline = Pipeline(batches, self.model, self.config, self.schedule, self.optimizer, verbose=log_verbose)
         self.average_loss, fwd_time = self.pipeline.run()
-
+        print(self.average_loss)
+    
         if log_verbose:
             print(f'{self.stage} {self.rank_within_stage} going to share embedding grads')
         
@@ -289,6 +292,8 @@ class Varuna(Module):
             print(f'{self.rank} {self.rank_within_stage} all-reduce')
 
         sync_start_time = time.time()
+
+        print("data depth is: ", self.data_depth)
         if self.fp16 or (self.data_depth > 1) or (self.partitions > 1):
             overflow, grad_norm = self.sync_across_workers(clip_grad_max_norm)
         else:
@@ -551,6 +556,8 @@ class Varuna(Module):
         flat_raw = torch.empty( flat_grad_size, device=self.device, 
                                 dtype=torch.float16 if self.fp16 else torch.float32)
 
+        print("About to do allreduce, size is: ", flat_grad_size)
+        
         if self.fp16:        
             scaler = _amp_state.loss_scalers[0]
             loss_scale = scaler.loss_scale()
@@ -654,20 +661,22 @@ class Varuna(Module):
         
     def extra_grad_norm_sq(self):
         extra_norm_sq = 0.0
-        for i,w in enumerate(self.shared_weights):
-            recv_stage, send_stage = self.shared_weight_stages[i]
-            recv_wt_name, send_wt_name = w
-            recv_weight, send_weight = None, None
-            for p in self.parameter_names:
-                if self.parameter_names[p] == send_wt_name:
-                    send_weight = p
-                if self.parameter_names[p] == recv_wt_name:
-                    recv_weight = p
-            if recv_stage == send_stage:
-                if self.stage == recv_stage and recv_weight.data_ptr() == send_weight.data_ptr():
-                    continue
-            if self.stage == send_stage:
-                if send_weight.grad is not None:
-                    extra_norm_sq += torch.norm(send_weight.grad) ** 2
+        
+        if not (self.shared_weights is None):
+            for i,w in enumerate(self.shared_weights):
+                recv_stage, send_stage = self.shared_weight_stages[i]
+                recv_wt_name, send_wt_name = w
+                recv_weight, send_weight = None, None
+                for p in self.parameter_names:
+                    if self.parameter_names[p] == send_wt_name:
+                        send_weight = p
+                    if self.parameter_names[p] == recv_wt_name:
+                        recv_weight = p
+                if recv_stage == send_stage:
+                    if self.stage == recv_stage and recv_weight.data_ptr() == send_weight.data_ptr():
+                        continue
+                if self.stage == send_stage:
+                    if send_weight.grad is not None:
+                        extra_norm_sq += torch.norm(send_weight.grad) ** 2
 
         return extra_norm_sq
