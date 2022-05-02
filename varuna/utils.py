@@ -102,7 +102,12 @@ def heartbeat(message, ip, port):
 
 def generate_schedule(chunks, stage, partitions):
     print(chunks,"chunks")
-    gensched_binary = os.path.join(os.path.dirname(os.path.abspath(__file__)),'genschedule')
+    
+    home_path = os.path.expanduser('~')
+    cur_dir = os.path.join(home_path, 'varuna/varuna')
+    #gensched_binary = os.path.join(os.path.dirname(os.path.abspath(__file__)),'genschedule')
+    
+    gensched_binary = os.path.join(cur_dir, 'genschedule')
     c_schedule = os.popen( gensched_binary + ' ' +
                             str(partitions) + ' ' +
                             str(chunks) + ' ' +
