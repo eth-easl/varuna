@@ -72,10 +72,11 @@ def varuna_train(args): # how to set batch size, chunk size?
 
                                         ]))
 
-    train_sampler = None
+    train_sampler = torch.utils.data.distributed.DistributedSampler(
+                    train_dataset, num_replicas=args.world_size, rank=args.rank)
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None), # ???????????????????
+        train_dataset, batch_size=args.chunk_size, shuffle=(train_sampler is None), 
         num_workers=8, pin_memory=True, sampler=train_sampler)
 
     print("Configure Varuna Model")
