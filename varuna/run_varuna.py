@@ -173,6 +173,7 @@ if __name__ == "__main__":
             # print("launch cmd is ", cmd)
         else:
             cmd = ["ssh"]
+            cmd.append("-o StrictHostKeyChecking=no")
             cmd.append(machine)
             cmd.append(f"echo \"{launch_cmd}\" > launch_varuna.sh; ")
             cmd.append(f"{HEARTBEAT_IP_ENV_VAR}={args.manager_ip}") 

@@ -133,7 +133,7 @@ class Varuna(Module):
         print("SHARED WEIGHTS ARE")
         print(self.shared_weight_stages)
 
-        self.batch_size = batch_size // self.data_depth
+        self.batch_size = batch_size #// self.data_depth  - We have already partitioned the batch size in DDP, no need to do it again
         self.micro_batch_size = chunk_size
         self.last_chunk_size = self.batch_size % chunk_size 
         self.init_communication()
@@ -164,6 +164,8 @@ class Varuna(Module):
         }
 
         self.chunks = math.ceil(self.batch_size / self.micro_batch_size)
+        
+        print("--------- About to generate schedule with ", self.chunks, " chunks at ", self.stage, " ", self.stage, ". Total stages are: ", self.partitions)
         self.schedule = utils.generate_schedule(self.chunks, self.stage, self.partitions)
         self.iteration = 0
         self.current_step = 0
