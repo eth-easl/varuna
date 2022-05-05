@@ -1,5 +1,5 @@
 ip_file=$1
-local_pid_path=${2:"/tmp/varuna/local_parent_pid"}
+local_pid_path="/tmp/varuna/local_parent_pid"
 machines=($(cat $ip_file))
 
 echo "triggering stop signal"

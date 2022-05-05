@@ -13,6 +13,7 @@ from datetime import timedelta
 import random
 import numpy as np
 import time
+import signal
 
 from varuna import Varuna
 
@@ -75,8 +76,10 @@ def varuna_train(args): # how to set batch size, chunk size?
     train_sampler = torch.utils.data.distributed.DistributedSampler(
                     train_dataset, num_replicas=args.world_size, rank=args.rank)
 
+    print("------ Train loader will be defined with batch size: ", args.batch_size, " and world size: ", args.world_size)
+
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.chunk_size, shuffle=(train_sampler is None), 
+        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None), 
         num_workers=8, pin_memory=True, sampler=train_sampler)
 
     print("Configure Varuna Model")
@@ -126,7 +129,7 @@ def varuna_train(args): # how to set batch size, chunk size?
             batch = {"inputs": images.to(model.device), "target": target.to(model.device)}
             #print(images, target)
             loss, overflow, grad_norm = model.step(batch)
-            print(loss)
+            #print(loss)
             # measure accuracy and record loss
             # acc1, acc5 = accuracy(output, target, topk=(1, 5))
             #losses.update(loss if args.varuna else loss.item(), images.size(0))
@@ -145,5 +148,11 @@ def varuna_train(args): # how to set batch size, chunk size?
 if __name__ == "__main__":
 
     args = parser.parse_args()
-    #mp.set_start_method("spawn")
+    
+    def handler(signum,_):
+        print("Got a signal - do nothing for now, just exit")
+        exit()
+
+    signal.signal(signal.SIGUSR1, handler)
+    
     varuna_train(args)                                     
