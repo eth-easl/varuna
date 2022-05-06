@@ -13,6 +13,11 @@ is_morphing = False
 available_machines_list = sys.argv[1]
 running_machines_list = sys.argv[2]     # TODO: check race confitions here
 PORT = int(sys.argv[3])
+
+# ddp => nstages=1
+batch_size = int(sys.argv[4])
+chunk_size = int(sys.argv[5])
+
 my_ip = socket.gethostbyname(socket.gethostname())
 HOST = my_ip
 
@@ -39,13 +44,12 @@ class Handler(socketserver.BaseRequestHandler):
                 p.kill()
 
      @staticmethod
-     def start_remote(resume=-1):
+     def start_remote(batch_size, chunk_size, world_size):
         global available_machines_list, my_ip
-        print("restarting", resume, flush=True)
-        cmd = "python -m varuna.run_varuna --resume " + \
-             f"--machine_list {available_machines_list} --manager_ip {my_ip}"
+        cmd = f"python3 -m varuna.run_varuna --no_morphing --gpus_per_node 1 --batch_size {batch_size} --chunk_size {chunk_size} --nstages 1" + \
+              f" --machine_list {available_machines_list} --code_dir /home/fot/varuna/examples/ResNet train_ddp_varuna.py --world-size {world_size}"
+        print(cmd)
         os.system(cmd)
-
 
      def handle(self):
         global checkpointed, is_preempting, is_restarting, is_morphing
@@ -65,8 +69,10 @@ class Handler(socketserver.BaseRequestHandler):
 
                     response = Handler.send_signal()
 
-                    # TODO: get new config and restart
-                    # Handler.start_remote(checkpointed) # resume
+                    print("Ready to restart")
+                    time.sleep(5)
+                    world_size = 1
+                    Handler.start_remote(batch_size, chunk_size, world_size) # TODO: add resume from checkpoint here
 
                     is_morphing = False
                     is_restarting = False
@@ -81,6 +87,7 @@ class Handler(socketserver.BaseRequestHandler):
 
         else:
             print("Not supported message")
+
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
