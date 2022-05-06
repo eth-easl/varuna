@@ -49,6 +49,7 @@ class Handler(socketserver.BaseRequestHandler):
         cmd = f"python3 -m varuna.run_varuna --no_morphing --gpus_per_node 1 --batch_size {batch_size} --chunk_size {chunk_size} --nstages 1" + \
               f" --machine_list {available_machines_list} --code_dir /home/fot/varuna/examples/ResNet train_ddp_varuna.py --world-size {world_size}"
         print(cmd)
+
         os.system(cmd)
 
      def handle(self):
@@ -59,7 +60,11 @@ class Handler(socketserver.BaseRequestHandler):
         print("{} got something from {}: {}".format(recv_time, self.client_address, data), flush=True)
 
         if 'morph' in data:
-            Handler.triggermorph.acquire()
+
+            if (not Handler.triggermorph.acquire(timeout=1)):
+                print("Morph in progress - abort")
+                return
+
             print("Lock acquired by morph:", is_restarting, is_morphing, is_preempting, flush=True)
             try:
                 if not is_preempting and not is_restarting and not is_morphing:
@@ -70,7 +75,7 @@ class Handler(socketserver.BaseRequestHandler):
                     response = Handler.send_signal()
 
                     print("Ready to restart")
-                    time.sleep(5)
+                    time.sleep(5) # TODO: why is this needed?
                     world_size = 1
                     Handler.start_remote(batch_size, chunk_size, world_size) # TODO: add resume from checkpoint here
 
