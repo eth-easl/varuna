@@ -25,12 +25,16 @@ parser.add_argument('--batch-size', default=-1, type=int, help='per process batc
 parser.add_argument('--stage_to_rank_map', default=None, type=str, help='stage to rank map of Varuna model')
 parser.add_argument('--local_rank', default=-1, type=int, help='process rank in the local node')
 parser.add_argument('--world-size', default=-1, type=int, help='number of nodes for distributed training')
+parser.add_argument('--arch', default=None, type=str, help='model architecture')
+parser.add_argument('--nclasses', default=-1, type=int, help='number of classes in the train dataset')
+parser.add_argument('--train-dir', default=None, type=str, help='Training set directory')
 
-class ResNet_Varuna(torch.nn.Module):
-    def __init__(self):
 
-        super(ResNet_Varuna, self).__init__()
-        self.model = models.__dict__['resnet50'](num_classes=10)
+class model_Varuna(torch.nn.Module):
+    def __init__(self, arch, nclasses):
+
+        super(model_Varuna, self).__init__()
+        self.model = models.__dict__[arch](num_classes=nclasses)
         self.metric_fn = F.cross_entropy
 
     def forward(self,inputs, target):
@@ -48,7 +52,7 @@ def cleanup():
 
 def varuna_train(args): # how to set batch size, chunk size?
 
-    num_epochs = 1
+    num_epochs = 3
     print("rank is: ", args.rank, ", world size is: ", args.world_size)
     dist_url = "env://"
     dist_backend = "gloo"
@@ -59,7 +63,7 @@ def varuna_train(args): # how to set batch size, chunk size?
 
     print("Configure dataset")
 
-    train_dir = "/cifar/train"
+    train_dir = args.train_dir
     kwargs = {'num_workers': 8, 'pin_memory': True}
 
     train_dataset = \
@@ -84,7 +88,7 @@ def varuna_train(args): # how to set batch size, chunk size?
 
     print("Configure Varuna Model")
 
-    model = ResNet_Varuna()
+    model = model_Varuna(args.arch, args.nclasses)
 
     def get_batch_fn(size, device=None): # is the "size" equal to chunk size or batch size?
             loader_ = torch.utils.data.DataLoader(train_dataset, batch_size=size) # what about sampling?
