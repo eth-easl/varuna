@@ -109,6 +109,7 @@ def varuna_train(args): # how to set batch size, chunk size?
 
     print("start training")
 
+    
     for epoch in range(num_epochs):
 
         if train_sampler is not None:
@@ -122,28 +123,20 @@ def varuna_train(args): # how to set batch size, chunk size?
 
         for i, (images, target) in enumerate(train_loader):
 
-            #if args.gpu is not None:
-            #    images = images.cuda(args.gpu, non_blocking=True)
-            #    target = target.cuda(args.gpu, non_blocking=True)
 
             batch = {"inputs": images.to(model.device), "target": target.to(model.device)}
             #print(images, target)
             loss, overflow, grad_norm = model.step(batch)
-            #print(loss)
-            # measure accuracy and record loss
-            # acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            #losses.update(loss if args.varuna else loss.item(), images.size(0))
-            # top1.update(acc1[0], images.size(0))
-            # top5.update(acc5[0], images.size(0))
 
             optimizer.step()
             optimizer.zero_grad()
 
             # measure elapsed time
-            print("Iter ", i, " took ", time.time()-start_iter)
+            print(f"---- From worker with rank: {args.rank}, Iter {i} took {time.time()-start_iter}")
             start_iter = time.time()
 
-        print("Epoch took: ", time.time()-start)
+        print(f"---- From worker with rank: {args.rank}, Epoch took: {time.time()-start}")
+        model.reset_meas()
 
 if __name__ == "__main__":
 

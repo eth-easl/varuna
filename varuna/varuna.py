@@ -170,6 +170,10 @@ class Varuna(Module):
         self.iteration = 0
         self.current_step = 0
 
+        # for benchmarking
+        self.mb_times = []
+        self.alr_times = []
+
     def init_communication(self):
         rank_within_stage = self.rank_within_stage
         self.send_rank = None; self.receive_rank = None
@@ -247,6 +251,12 @@ class Varuna(Module):
         raise RuntimeError("Varuna uses the 'step' function for both fwd/bwd together,\
                              or the 'evaluate' function for evaluation.")
 
+    def reset_meas(self):
+        print(f'Average comp time is {numpy.median(self.mb_times)}')
+        print(f'Average alr time is {numpy.median(self.alr_times)}')
+        self.mb_times = []
+        self.alr_times = []
+        
     def step(self, inputs, clip_grad_max_norm=None):
         r""" Perform a single training step. Executes forward and backward passes for 
         the global batch. This function must be called by all distributed workers in the training loop.
@@ -275,11 +285,13 @@ class Varuna(Module):
         self.config["make_logfile"] = bool(self.config["make_logfile"] and self.current_step < 5)
         batch_time = time.time()
 
-
-        print("schedule is: ", self.schedule)
         self.pipeline = Pipeline(batches, self.model, self.config, self.schedule, self.optimizer, verbose=log_verbose)
+        
+        # 1. measure the time for forward, backward pass for all microbatches
+        mb_time = time.time()
         self.average_loss, fwd_time = self.pipeline.run()
-        print(self.average_loss)
+        print(f"Computation time is: {time.time()-mb_time}")
+        self.mb_times.append(time.time()-mb_time)
     
         if log_verbose:
             print(f'{self.stage} {self.rank_within_stage} going to share embedding grads')
@@ -295,12 +307,13 @@ class Varuna(Module):
 
         sync_start_time = time.time()
 
-        print("data depth is: ", self.data_depth)
         if self.fp16 or (self.data_depth > 1) or (self.partitions > 1):
             overflow, grad_norm = self.sync_across_workers(clip_grad_max_norm)
         else:
             overflow = False; grad_norm = 1
         sync_time =  time.time() - sync_start_time
+        print(f"All-reduce time is {sync_time}")
+        self.alr_times.append(sync_time)
     
         if log_verbose:
             print(f'{self.rank} {self.rank_within_stage} all-reduce done;')
