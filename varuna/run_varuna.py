@@ -166,6 +166,7 @@ if __name__ == "__main__":
         launch_cmd = launch_cmd_format.format(i, reachable_count, master_addr)
         out_file = open(f"ssh_logs/ssh_out_{i}", "w")
         err_file = open(f"ssh_logs/ssh_err_{i}", "w")
+        setup_cmd = "sudo rm -rf /home/fot/varuna && git clone https://github.com/eth-easl/varuna.git /home/fot/varuna && cd /home/fot/varuna && git fetch origin baseline && git pull origin baseline && git checkout baseline &&  sudo python3 setup.py install "
         
         if machine == "127.0.0.1":
             cmd = launch_cmd.split(" ")
@@ -175,7 +176,7 @@ if __name__ == "__main__":
             cmd = ["ssh"]
             cmd.append("-o StrictHostKeyChecking=no")
             cmd.append(machine)
-            cmd.append(f"echo \"{launch_cmd}\" > launch_varuna.sh; ")
+            cmd.append(f"echo \"{setup_cmd} && {launch_cmd}\" > launch_varuna.sh;  ")
             cmd.append(f"{HEARTBEAT_IP_ENV_VAR}={args.manager_ip}") 
             cmd.append(f"{MORPH_PORT_ENV_VAR}={MORPH_PORT} {HEARTBEAT_PORT_ENV_VAR}={HEARTBEAT_PORT}")
             cmd.append(get_env_vars(args.env_file))
