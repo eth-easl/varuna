@@ -29,6 +29,7 @@ parser.add_argument('--arch', default=None, type=str, help='model architecture')
 parser.add_argument('--nclasses', default=-1, type=int, help='number of classes in the train dataset')
 parser.add_argument('--train-dir', default=None, type=str, help='Training set directory')
 parser.add_argument('--num-epochs', default=1, type=int, help='Number of epochs')
+parser.add_argument('--num-dl', default=4, type=int, help='Number data loading workers')
 
 
 class model_Varuna(torch.nn.Module):
@@ -64,7 +65,6 @@ def varuna_train(args): # how to set batch size, chunk size?
     print("Configure dataset")
 
     train_dir = args.train_dir
-    kwargs = {'num_workers': 8, 'pin_memory': True}
 
     train_dataset = \
             datasets.ImageFolder(train_dir,
@@ -84,7 +84,7 @@ def varuna_train(args): # how to set batch size, chunk size?
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None), 
-        num_workers=8, pin_memory=True, sampler=train_sampler)
+        num_workers=args.num_dl, pin_memory=True, sampler=train_sampler)
 
     print("Configure Varuna Model")
 
@@ -122,11 +122,16 @@ def varuna_train(args): # how to set batch size, chunk size?
         print("Start epoch: ", epoch)
         start = time.time()
         start_iter = time.time()
-        
+
+        dl = len(iter(train_loader))
+        print("data length is: ", dl)
+
         ############################################################### VARUNA ##################################################
 
         for i, (images, target) in enumerate(train_loader):
 
+            if i==dl-1: # TODO: fix this
+                break
 
             batch = {"inputs": images.to(model.device), "target": target.to(model.device)}
             #print(images, target)
