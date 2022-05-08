@@ -28,6 +28,7 @@ parser.add_argument('--world-size', default=-1, type=int, help='number of nodes 
 parser.add_argument('--arch', default=None, type=str, help='model architecture')
 parser.add_argument('--nclasses', default=-1, type=int, help='number of classes in the train dataset')
 parser.add_argument('--train-dir', default=None, type=str, help='Training set directory')
+parser.add_argument('--num-epochs', default=1, type=int, help='Number of epochs')
 
 
 class model_Varuna(torch.nn.Module):
@@ -52,7 +53,6 @@ def cleanup():
 
 def varuna_train(args): # how to set batch size, chunk size?
 
-    num_epochs = 3
     print("rank is: ", args.rank, ", world size is: ", args.world_size)
     dist_url = "env://"
     dist_backend = "gloo"
@@ -114,7 +114,7 @@ def varuna_train(args): # how to set batch size, chunk size?
     print("start training")
 
     
-    for epoch in range(num_epochs):
+    for epoch in range(args.num_epochs):
 
         if train_sampler is not None:
             train_sampler.set_epoch(epoch)
