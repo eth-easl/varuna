@@ -6,6 +6,7 @@ from torch.multiprocessing import Process
 from queue import Queue
 from threading import Thread
 import math
+import glob
 try:
     from apex import amp
     from apex.amp import _amp_state
@@ -19,7 +20,7 @@ from .partitioned_model import PartitionedModel
 from .pipeline import Pipeline
 from . import utils
 from .checkpoint import write_varuna_checkpoint, get_local_ckpt_tracker, \
-         load_varuna_checkpoint, load_varuna_optimizer, num_params_written, get_prev_checkpoint
+         load_varuna_checkpoint, load_varuna_optimizer, num_params_written, num_params_written_from_filename, get_prev_checkpoint
 import gc
 import numpy
 import socket
@@ -486,14 +487,39 @@ class Varuna(Module):
             step = self.iteration
 
         ckpt_future = write_varuna_checkpoint(self, global_store, epoch, step, 
-                                tempdir=tempdir, shard=shard)
+                                tempdir=tempdir, shard=shard, ddp=True)
         
         return ckpt_future
     
     def to(self, device):
         self.model.to(device)
 
-    def load_checkpoint(self, global_store, iteration, check_complete = True):
+    def preload(self, global_store):
+
+        r""" Get the latest *complete* checkpoint from the available
+        :param global_store: path under which varuna checkpoints were written. 
+            Should be accessible by all workers.
+        """
+        dir_name = global_store+"/"
+        list_of_files = filter( os.path.isdir, glob.glob(dir_name + '*'))
+        list_of_files = sorted(list_of_files, key = os.path.getmtime, reverse=True)
+        print(list_of_files)
+
+        num_parameter_instances = len(self.partitioned_model.module.state_dict())
+        print("---------- Needed: ", num_parameter_instances)
+
+        for s in list_of_files:
+            params_written = num_params_written_from_filename(s)
+            print(f"{s} , Written: {params_written}")
+            if params_written >= num_parameter_instances:
+                print("------------------- Written: ", params_written)
+                tokens = s.split("_")
+                iteration = int(tokens[-1])
+                epoch = int(tokens[-2])
+                return self.load_checkpoint(global_store, epoch, iteration, True)
+
+
+    def load_checkpoint(self, global_store, epoch, iteration, check_complete = True):
         r"""Loads a varuna checkpoint from a shared directory. Each varuna checkpoint is a directory
         named as "varuna_ckpt_<iteration>". So the path under which all such checkpoints were written
         should be specified.
@@ -507,8 +533,9 @@ class Varuna(Module):
             A checkpoint can be incomplete if the write was interrupted.  
         :type check_complete: bool, optional 
         """
-        cp_dir_name = os.path.join(global_store, "varuna_ckpt_{}".format(iteration))
-
+        cp_dir_name = os.path.join(global_store, "varuna_ckpt_{}_{}".format(epoch, iteration))
+        print("------------------- About to load from file: ", cp_dir_name)
+        '''
         if check_complete:
             num_parameter_instances = len(self.param_name_to_pstage)
             params_written = num_params_written(global_store, iteration)
@@ -517,11 +544,12 @@ class Varuna(Module):
                 with open(get_local_ckpt_tracker(self.local_rank),"w") as f:
                     f.write(str(prev_ckpt))
                 assert False, f"CKPT NOT COMPLETE!!, only {params_written}/{num_parameter_instances} params done"
-
+        '''
         total_num_pstages = self.partitioned_model.num_cutpoints + 1
 
         model_state_dict = load_varuna_checkpoint(self.stage, self.partitions, 
                                                 total_num_pstages,  cp_dir_name)
+
 
         # TODO: this should be strict and should raise error in the lm_head_weight case
         self.partitioned_model.module.load_state_dict(model_state_dict)
@@ -540,7 +568,8 @@ class Varuna(Module):
             # print("writing", iteration)
             f.write(str(iteration))
 
-        self.iteration = iteration    
+        self.iteration = iteration   
+        return epoch, iteration 
 
     def share_weight_grads(self):
         parameter_names = self.parameter_names

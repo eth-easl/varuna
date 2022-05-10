@@ -31,6 +31,7 @@ parser.add_argument('--train-dir', default=None, type=str, help='Training set di
 parser.add_argument('--num-epochs', default=1, type=int, help='Number of epochs')
 parser.add_argument('--num-dl', default=4, type=int, help='Number data loading workers')
 parser.add_argument('--ch-freq', default=10, type=int, help='Checkpoint iteration interval')
+parser.add_argument('--resume', default=False, action='store_true', help='Load from the latest checkpoint (if exists)')
 
 
 class model_Varuna(torch.nn.Module):
@@ -38,6 +39,8 @@ class model_Varuna(torch.nn.Module):
 
         super(model_Varuna, self).__init__()
         self.model = models.__dict__[arch](num_classes=nclasses)
+        
+
         self.metric_fn = F.cross_entropy
 
     def forward(self,inputs, target):
@@ -110,18 +113,23 @@ def varuna_train(args): # how to set batch size, chunk size?
     model = Varuna(model, args.stage_to_rank_map, get_batch_fn, 
                     args.batch_size, args.chunk_size, fp16=False, 
                     local_rank=args.local_rank, device=-1) # how are these set?
-
-
+    
+    
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1,
                                 momentum=0.9,
                                 weight_decay=1e-4)
     model.set_optimizer(optimizer)
 
+    start_epoch=0
+    start_iter=0
+    if args.resume:
+        start_epoch, start_iteration = model.preload(global_check_dir)
 
-    print("start training")
 
-    
-    for epoch in range(args.num_epochs):
+    print(f"--------------------------------- start training from epoch {start_epoch} and iteration {start_iteration}")
+
+
+    for epoch in range(start_epoch, args.num_epochs):
 
         if train_sampler is not None:
             train_sampler.set_epoch(epoch)
@@ -133,28 +141,36 @@ def varuna_train(args): # how to set batch size, chunk size?
         dl = len(iter(train_loader))
         print("data length is: ", dl)
 
-        ############################################################### VARUNA ##################################################
+        train_iter = enumerate(train_loader)
 
-        for i, (images, target) in enumerate(train_loader):
+        for _ in range(start_iteration):
+            next(train_iter)
 
-            if i==dl-1: # TODO: fix this
-                break
+        #TODO: why batch_idx a tansor?
+        batch_idx, old_batch = next(train_iter)
 
+        print(batch_idx)
+        while batch_idx < dl-1:
+
+            images = old_batch[0]
+            target = old_batch[1]
             batch = {"inputs": images.to(model.device), "target": target.to(model.device)}
-            #print(images, target)
+            print(images, target)
             loss, overflow, grad_norm = model.step(batch)
 
             optimizer.step()
             optimizer.zero_grad()
 
             # measure elapsed time
-            print(f"---- From worker with rank: {args.rank}, Iter {i} took {time.time()-start_iter}")
+
+            print(f"---- From worker with rank: {args.rank}, Iter {batch_idx} took {time.time()-start_iter}")
             start_iter = time.time()
 
             if (args.ch_freq > 0 and i % args.ch_freq == 0):
-                print("Checkpoint at iteration ", i)
-                ckpt_future = model.checkpoint(global_check_dir, epoch, i, check_temp_dir, True, False) # what to do with ckpt_future ?
+                print("Checkpoint at iteration ", batch_idx)
+                ckpt_future = model.checkpoint(global_check_dir, epoch, batch_idx, check_temp_dir, True, False) # what to do with ckpt_future ?
 
+        batch_idx, batch = next(train_iter)
         print(f"---- From worker with rank: {args.rank}, Epoch took: {time.time()-start}")
         model.reset_meas()
 

@@ -28,7 +28,7 @@ opt_extra_state_name = "opt-common-state"
             with the global store in the background. Lowers checkpoint write time in the critical path.
     shard: bool, whether to shard checkpoint writes over data parallel workers as well. Speeds up checkpoint 
 """
-def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=None, shard=False):
+def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=None, shard=False, ddp=True):
 
     optimizer = varuna_model.optimizer
     cp_time = time.time()
@@ -41,6 +41,7 @@ def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=Non
     param_name_to_pstage = varuna_model.param_name_to_pstage
     cuts_per_stage = varuna_model.partitioned_model.cuts_per_stage
 
+
     rank_within_stage = varuna_model.stage_to_rank_map[stage].index(rank)
     pstages = range(cuts_per_stage * stage, (stage+1)* cuts_per_stage)
     data_depth = len(varuna_model.stage_to_rank_map[stage])
@@ -48,12 +49,17 @@ def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=Non
     cp_dir_name, marker_dir_name = create_ckpt_dirs(global_store, tempdir, rank, local_rank, epoch, step)
         
     ordered_params = list(varuna_model.partitioned_model.module.parameters())   
+    ddp_params = varuna_model.partitioned_model.module.state_dict()
+
     if varuna_model.fp16:
         ordered_params = amp.master_params(optimizer)
-    mv_futures_, param_count = checkpoint_model_params(ordered_params, 
-                                        rank_within_stage, shard, data_depth,
-                                        pstages, parameter_names, param_name_to_pstage, 
-                                        cp_dir_name, tempdir = tempdir, executor = executor)
+    if ddp:
+        mv_futures_, param_count = checkpoint_model_state_ddp(ddp_params, rank_within_stage, shard, data_depth, cp_dir_name, tempdir = tempdir, executor = executor)
+    else:
+        mv_futures_, param_count = checkpoint_model_params(ordered_params, 
+                                            rank_within_stage, shard, data_depth,
+                                            pstages, parameter_names, param_name_to_pstage, 
+                                            cp_dir_name, tempdir = tempdir, executor = executor)
     mv_futures.extend( mv_futures_ )
     mv_futures_, state_count = checkpoint_opt_state(optimizer, rank_within_stage, shard, data_depth,
                                             pstages, parameter_names, param_name_to_pstage, 
@@ -81,12 +87,48 @@ def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=Non
         local_tracker = get_local_ckpt_tracker(local_rank)
         with open(local_tracker,"w") as f:
             f.write(str(step))
-        global_tracker = get_global_ckpt_tracker(global_store, rank, step)
+        global_tracker = get_global_ckpt_tracker(global_store, rank, epoch, step)
         with open(global_tracker,"w") as f:
             f.write(str(param_count))
 
     return ckpt_future
 
+def checkpoint_model_state_ddp(ordered_params, rank_within_stage, shard, data_depth,
+                cp_dir_name, tempdir = None, executor = None):
+    
+    # checkpoint the whole state dict of the model (buffers included)
+    data_depth = data_depth if shard else 1 
+    mv_futures = []
+    param_count = 0
+
+    if rank_within_stage == 0 or shard:    
+        pstage_state_dicts = dict()
+       
+        ind=0
+        print(f"rank_within_stage: {rank_within_stage}")
+        for param_name, p in ordered_params.items():
+            if ind % data_depth != rank_within_stage:
+                ind += 1
+                continue
+            pstage_state_dicts[param_name] = p
+            param_count += 1
+            ind += 1
+        
+        print("------- PARAM_COUNT: ", param_count)
+        # DDP: only one stage
+        cp_name = os.path.join(cp_dir_name, params_format.format(0))
+        if data_depth > 1:
+            cp_name += "_" + str(rank_within_stage)
+        if tempdir is not None:
+            temp_name =  os.path.join(tempdir, params_format.format(0))
+            if data_depth > 1:
+                temp_name += "_" + str(rank_within_stage)
+            torch.save(pstage_state_dicts, temp_name)
+            mv_futures.append(executor.submit(shutil.move, temp_name, cp_name))
+        else:
+            torch.save(pstage_state_dicts, cp_name)
+
+    return mv_futures, param_count
 
 def checkpoint_opt_state(optimizer, rank_within_stage, shard, data_depth,
                 pstages, parameter_names, param_name_to_pstage, 
@@ -160,6 +202,7 @@ def checkpoint_model_params(ordered_params, rank_within_stage, shard, data_depth
             param_count += 1
         
         
+        print("------- PARAM_COUNT: ", param_count)
         for i in pstages:
             cp_name = os.path.join(cp_dir_name, params_format.format(i))
             if data_depth > 1:
@@ -205,7 +248,7 @@ def future_on_futures(mv_futures, rank, local_rank, iteration, epoch, global_sto
         local_tracker = get_local_ckpt_tracker(local_rank)
         with open(local_tracker,"w") as f:
             f.write(str(iteration))
-        global_tracker = get_global_ckpt_tracker(global_store, rank, iteration)
+        global_tracker = get_global_ckpt_tracker(global_store, rank, epoch, iteration)
         with open(global_tracker,"w") as f:
             f.write(str(param_count))
 
@@ -218,6 +261,7 @@ def load_varuna_checkpoint(my_stage, num_stages, total_num_pstages, common_store
     for i in pstages_to_read:
         cp_file = os.path.join(common_store, params_format.format(i))
         if os.path.exists(cp_file):
+            print(f"load from the file {cp_file}")
             state_dict_ = torch.load(cp_file,map_location=device)
             state_dict.update(state_dict_)
         else:
@@ -240,6 +284,7 @@ def load_varuna_optimizer(optimizer, my_stage, num_stages, total_num_pstages, pa
     for i in pstages_to_read:
         f = os.path.join(common_store, opt_state_format.format(i))
         if os.path.exists(f):
+            print(f"load from the file {f}")
             state_ = torch.load(f,map_location=device)
             opt_state.update(state_)
         else:
@@ -266,12 +311,22 @@ def load_varuna_optimizer(optimizer, my_stage, num_stages, total_num_pstages, pa
 def get_local_ckpt_tracker(local_rank):
     return os.path.join(VARUNA_TEMP_FOLDER, f"ckpt_tracker_{local_rank}.txt")
 
-def get_global_ckpt_tracker(global_store, rank, step):
-    return os.path.join(global_store, "varuna_ckpt_{}".format(step),
+def get_global_ckpt_tracker(global_store, rank, epoch, step):
+    print(f"write markers at {epoch},{step}")
+    return os.path.join(global_store, "varuna_ckpt_{}_{}".format(epoch, step),
                             MARKERS, f"complete_{rank}.txt")
 
 def num_params_written(global_store, step):
     marker_dir = os.path.join(global_store, f"varuna_ckpt_{step}", MARKERS)
+    markers = os.listdir(marker_dir)
+    complete = 0
+    for m in markers:
+        with open(os.path.join(marker_dir, m),"r") as f:
+            complete += int(f.read())
+    return complete
+
+def num_params_written_from_filename(filename):
+    marker_dir = os.path.join(filename, MARKERS)
     markers = os.listdir(marker_dir)
     complete = 0
     for m in markers:
