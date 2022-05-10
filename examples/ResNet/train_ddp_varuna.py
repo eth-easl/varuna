@@ -69,7 +69,7 @@ def varuna_train(args): # how to set batch size, chunk size?
 
     # for checkpointing
     check_temp_dir = os.path.join(os.getcwd(), 'temp_check')
-    if not os.path.exists(check_temp_dir):
+    if not os.path.exists(check_temp_dir) and args.local_rank==0:
         os.makedirs(check_temp_dir)
     global_check_dir = '/home/fot/globals' # must be mounted 
 
