@@ -30,6 +30,7 @@ parser.add_argument('--nclasses', default=-1, type=int, help='number of classes 
 parser.add_argument('--train-dir', default=None, type=str, help='Training set directory')
 parser.add_argument('--num-epochs', default=1, type=int, help='Number of epochs')
 parser.add_argument('--num-dl', default=4, type=int, help='Number data loading workers')
+parser.add_argument('--ch-freq', default=10, type=int, help='Checkpoint iteration interval')
 
 
 class model_Varuna(torch.nn.Module):
@@ -65,6 +66,12 @@ def varuna_train(args): # how to set batch size, chunk size?
     print("Configure dataset")
 
     train_dir = args.train_dir
+
+    # for checkpointing
+    check_temp_dir = os.path.join(os.getcwd(), 'temp_check')
+    if not os.path.exists(check_temp_dir):
+        os.makedirs(check_temp_dir)
+    global_check_dir = '/home/fot/globals' # must be mounted 
 
     train_dataset = \
             datasets.ImageFolder(train_dir,
@@ -143,6 +150,10 @@ def varuna_train(args): # how to set batch size, chunk size?
             # measure elapsed time
             print(f"---- From worker with rank: {args.rank}, Iter {i} took {time.time()-start_iter}")
             start_iter = time.time()
+
+            if (args.ch_freq > 0 and i % args.ch_freq == 0):
+                print("Checkpoint at iteration ", i)
+                ckpt_future = model.checkpoint(global_check_dir, epoch, i, check_temp_dir, True, False) # what to do with ckpt_future ?
 
         print(f"---- From worker with rank: {args.rank}, Epoch took: {time.time()-start}")
         model.reset_meas()

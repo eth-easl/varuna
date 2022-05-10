@@ -28,7 +28,7 @@ opt_extra_state_name = "opt-common-state"
             with the global store in the background. Lowers checkpoint write time in the critical path.
     shard: bool, whether to shard checkpoint writes over data parallel workers as well. Speeds up checkpoint 
 """
-def write_varuna_checkpoint(varuna_model, global_store, step, tempdir=None, shard=False):
+def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=None, shard=False):
 
     optimizer = varuna_model.optimizer
     cp_time = time.time()
@@ -45,7 +45,7 @@ def write_varuna_checkpoint(varuna_model, global_store, step, tempdir=None, shar
     pstages = range(cuts_per_stage * stage, (stage+1)* cuts_per_stage)
     data_depth = len(varuna_model.stage_to_rank_map[stage])
 
-    cp_dir_name, marker_dir_name = create_ckpt_dirs(global_store, tempdir, rank, local_rank, step)
+    cp_dir_name, marker_dir_name = create_ckpt_dirs(global_store, tempdir, rank, local_rank, epoch, step)
         
     ordered_params = list(varuna_model.partitioned_model.module.parameters())   
     if varuna_model.fp16:
@@ -73,7 +73,7 @@ def write_varuna_checkpoint(varuna_model, global_store, step, tempdir=None, shar
     ckpt_future = None
     if tempdir is not None and len(mv_futures) > 0:
         ckpt_future = executor.submit(future_on_futures, mv_futures, rank, local_rank, 
-                        step, global_store, param_count)
+                        step, epoch, global_store, param_count)
         executor.shutdown(wait = False)
     else:
         local_tracker = get_local_ckpt_tracker(local_rank)
@@ -174,8 +174,8 @@ def checkpoint_model_params(ordered_params, rank_within_stage, shard, data_depth
     return mv_futures, param_count
 
 
-def create_ckpt_dirs(global_store, tempdir, rank, local_rank, step):
-    cp_dir_name = os.path.join(global_store, "varuna_ckpt_{}".format(step))
+def create_ckpt_dirs(global_store, tempdir, rank, local_rank, epoch, step):
+    cp_dir_name = os.path.join(global_store, "varuna_ckpt_{}_{}".format(epoch, step))
     marker_dir_name = os.path.join(cp_dir_name, MARKERS)
     if rank == 0 and (not os.path.exists(cp_dir_name)):
         os.makedirs(cp_dir_name)
@@ -186,7 +186,7 @@ def create_ckpt_dirs(global_store, tempdir, rank, local_rank, step):
         pass
     return cp_dir_name, marker_dir_name
 
-def future_on_futures(mv_futures, rank, local_rank, iteration, global_store, param_count):
+def future_on_futures(mv_futures, rank, local_rank, iteration, epoch, global_store, param_count):
     done, notdone = concurrent.futures.wait(mv_futures)
     print("{} futures done!".format(len(done)))
     error = False

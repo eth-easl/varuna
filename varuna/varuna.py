@@ -467,7 +467,7 @@ class Varuna(Module):
         for param in self.model.parameters():
             param.grad = None
 
-    def checkpoint(self, global_store, step=None, tempdir=None, shard=False, on_demand=False):
+    def checkpoint(self, global_store, epoch=None, step=None, tempdir=None, shard=False, on_demand=False):
         r""" Writes a varuna checkpoint with model parameters, optimizer state etc. 
         Each checkpoint is a directory, written under the given path.
         
@@ -485,7 +485,7 @@ class Varuna(Module):
         if step is None:
             step = self.iteration
 
-        ckpt_future = write_varuna_checkpoint(self, global_store, step, 
+        ckpt_future = write_varuna_checkpoint(self, global_store, epoch, step, 
                                 tempdir=tempdir, shard=shard)
         
         return ckpt_future
