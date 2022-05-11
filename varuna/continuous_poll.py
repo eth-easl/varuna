@@ -16,6 +16,7 @@ parser.add_argument('--zone', default="us-west1-a", type=str, help='Cluster zone
 parser.add_argument('--available_machines_list', default="", type=str, help='File of the available machine IPs')
 parser.add_argument('--running_machines_list', default="", type=str, help='File of the currently running machine IPs')
 parser.add_argument('--simulated_machines_list', default="", type=str, help='File of the simulated machine IPs')
+parser.add_argument('--log-file', default="", type=str, help='File to write the number of available VMs')
 
 # cluster = sys.argv[1]
 counter = 0
@@ -66,7 +67,7 @@ def client(ip, port, message):
         sock.connect((ip, port))
         sock.sendall(bytes(message, 'ascii'))
 
-def poll_and_update():
+def poll_and_update(f):
     print(str(datetime.now()), flush=True)
     current_machines = get_current_machines()
     current_num_machines = len(current_machines)
@@ -86,6 +87,10 @@ def poll_and_update():
         msg = f"morph {len(new_machines)}"
         client(args.server_ip, args.server_port, msg)
         print(len(new_machines), flush=True)
+
+    status = str(time.time()) + "," + str(len(new_machines)) + "\n"
+    f.write(status)
+    f.flush()
 
 
 def get_current_machines():
@@ -124,8 +129,9 @@ def get_available_machines():
     return get_avail(vm_list)
 
 def notify():
+     f=open(args.log_file, 'w')
      while True:
-        poll_and_update()
+        poll_and_update(f)
         time.sleep(10)
 
 if __name__ == "__main__":
