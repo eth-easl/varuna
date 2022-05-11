@@ -121,7 +121,7 @@ def varuna_train(args): # how to set batch size, chunk size?
     model.set_optimizer(optimizer)
 
     start_epoch=0
-    start_iter=0
+    start_iteration=0
     if args.resume:
         start_epoch, start_iteration = model.preload(global_check_dir)
 
@@ -147,15 +147,13 @@ def varuna_train(args): # how to set batch size, chunk size?
             next(train_iter)
 
         #TODO: why batch_idx a tansor?
-        batch_idx, old_batch = next(train_iter)
+        batch_idx, batch = next(train_iter)
 
-        print(batch_idx)
         while batch_idx < dl-1:
 
-            images = old_batch[0]
-            target = old_batch[1]
+            images = batch[0]
+            target = batch[1]
             batch = {"inputs": images.to(model.device), "target": target.to(model.device)}
-            print(images, target)
             loss, overflow, grad_norm = model.step(batch)
 
             optimizer.step()
@@ -166,13 +164,15 @@ def varuna_train(args): # how to set batch size, chunk size?
             print(f"---- From worker with rank: {args.rank}, Iter {batch_idx} took {time.time()-start_iter}")
             start_iter = time.time()
 
-            if (args.ch_freq > 0 and i % args.ch_freq == 0):
+            if (args.ch_freq > 0 and (start_iteration-batch_idx) % args.ch_freq == 0):
                 print("Checkpoint at iteration ", batch_idx)
                 ckpt_future = model.checkpoint(global_check_dir, epoch, batch_idx, check_temp_dir, True, False) # what to do with ckpt_future ?
 
-        batch_idx, batch = next(train_iter)
+            batch_idx, batch = next(train_iter)
+        
         print(f"---- From worker with rank: {args.rank}, Epoch took: {time.time()-start}")
         model.reset_meas()
+        start_iteration=0
 
 if __name__ == "__main__":
 
