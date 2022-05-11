@@ -390,7 +390,7 @@ def prepare_model_and_optimizer(args, device, get_dict_batch):
         global_batch_size = args.train_batch_size #* data_parallel_size
         shared_weights = [("model.bert.embeddings.word_embeddings.weight", "model.cls.predictions.decoder.weight")]
         model = Varuna(model, args.stage_to_rank_map, get_batch_fn, global_batch_size, 
-                args.chunk_size, fp16=args.fp16, device=-1, shared_weights=shared_weights)
+                args.chunk_size, fp16=args.fp16, local_rank=args.local_rank, device=-1, shared_weights=shared_weights)
 
     checkpoint = None
     load_iter = None
