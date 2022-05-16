@@ -161,7 +161,8 @@ def varuna_train(args): # how to set batch size, chunk size?
 
             # measure elapsed time
 
-            print(f"---- From worker with rank: {args.rank}, Iter {batch_idx} took {time.time()-start_iter}")
+            if args.local_rank==0:
+                print(f"---- From worker with rank: {args.rank}, Iter {batch_idx} took {time.time()-start_iter}", flush=True)
             start_iter = time.time()
 
             if (args.ch_freq > 0 and (start_iteration-batch_idx) % args.ch_freq == 0):
@@ -170,7 +171,9 @@ def varuna_train(args): # how to set batch size, chunk size?
 
             batch_idx, batch = next(train_iter)
         
-        print(f"---- From worker with rank: {args.rank}, Epoch took: {time.time()-start}")
+        if args.local_rank==0:
+            print(f"---- From worker with rank: {args.rank}, Timestamp is: {time.time()}, Epoch {epoch} took: {time.time()-start}", flush=True)
+        
         model.reset_meas()
         start_iteration=0
 
