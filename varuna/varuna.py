@@ -518,6 +518,8 @@ class Varuna(Module):
                 epoch = int(tokens[-2])
                 return self.load_checkpoint(global_store, epoch, iteration, True)
 
+        return 0,0
+
 
     def load_checkpoint(self, global_store, epoch, iteration, check_complete = True):
         r"""Loads a varuna checkpoint from a shared directory. Each varuna checkpoint is a directory
