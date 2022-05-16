@@ -76,7 +76,8 @@ class Handler(socketserver.BaseRequestHandler):
 
                     print("Ready to restart")
                     time.sleep(5) # TODO: why is this needed?
-                    world_size = 1
+                    world_size = int(data.split()[-1])
+                    print("world_size is: ", world_size)
                     Handler.start_remote(batch_size, chunk_size, world_size) # TODO: add resume from checkpoint here
 
                     is_morphing = False

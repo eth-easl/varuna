@@ -166,7 +166,7 @@ if __name__ == "__main__":
         launch_cmd = launch_cmd_format.format(i, reachable_count, master_addr)
         out_file = open(f"ssh_logs/ssh_out_{i}", "w")
         err_file = open(f"ssh_logs/ssh_err_{i}", "w")
-        setup_cmd = "sudo rm -rf /home/fot/varuna && git clone https://github.com/eth-easl/varuna.git /home/fot/varuna && cd /home/fot/varuna && git fetch origin baseline && git pull origin baseline && git checkout baseline &&  sudo python3 setup.py install "
+        setup_cmd = "python3 check_fuse.py && sudo rm -rf /home/fot/varuna && git clone https://github.com/eth-easl/varuna.git /home/fot/varuna && cd /home/fot/varuna && git fetch origin baseline && git pull origin baseline && git checkout baseline &&  sudo python3 setup.py install "
         
         if machine == "127.0.0.1":
             cmd = launch_cmd.split(" ")
