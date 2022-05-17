@@ -26,6 +26,8 @@ is_morphing = False
 is_preempting = False
 checkpointed=False
 
+cnt=0
+
 class Handler(socketserver.BaseRequestHandler):
 
      triggermorph = threading.Lock()
@@ -43,6 +45,28 @@ class Handler(socketserver.BaseRequestHandler):
             if p is not None:
                 p.kill()
 
+     def kill_all():
+        print("kill all processes", flush=True)
+        sh = os.path.join(Handler.scripts_folder, "kill_all.sh")
+        print(sh)
+        p = None
+        try:
+            p = subprocess.call(['bash', sh, running_machines_list], timeout=10)
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            print("signal timed/errored out: ",e)
+
+            if p is not None:
+                p.kill()
+
+     def move_logs(i):
+        print("Move old logs", flush=True)
+
+        old_path = "/home/fot/varuna/ssh_logs"
+        new_path="/home/fot/varuna/ssh_logs_" + str(i)
+        cmd = "scp -r " + old_path + " " + new_path
+        os.system(cmd)
+
+
      @staticmethod
      def start_remote(batch_size, chunk_size, world_size):
         global available_machines_list, my_ip
@@ -53,7 +77,7 @@ class Handler(socketserver.BaseRequestHandler):
         os.system(cmd)
 
      def handle(self):
-        global checkpointed, is_preempting, is_restarting, is_morphing
+        global checkpointed, is_preempting, is_restarting, is_morphing, cnt
         data = str(self.request.recv(1024), 'ascii')
         cur_thread = threading.current_thread()
         recv_time = datetime.now()
@@ -73,9 +97,16 @@ class Handler(socketserver.BaseRequestHandler):
                     is_morphing = True
 
                     response = Handler.send_signal()
+                    Handler.kill_all()
+
+                    time.sleep(5)
+                    # save logs
+
+                    Handler.move_logs(cnt)
+                    cnt += 1
+
 
                     print("Ready to restart")
-                    time.sleep(5) # TODO: why is this needed?
                     world_size = int(data.split()[-1])
                     print("world_size is: ", world_size)
                     Handler.start_remote(batch_size, chunk_size, world_size) # TODO: add resume from checkpoint here
