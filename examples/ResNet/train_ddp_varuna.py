@@ -167,7 +167,7 @@ def varuna_train(args): # how to set batch size, chunk size?
 
             if (args.ch_freq > 0 and (start_iteration-batch_idx) % args.ch_freq == 0):
                 print("Checkpoint at iteration ", batch_idx)
-                ckpt_future = model.checkpoint(global_check_dir, epoch, batch_idx, check_temp_dir, True, False) # what to do with ckpt_future ?
+                ckpt_future = model.checkpoint(global_check_dir, epoch, batch_idx, check_temp_dir, False, False) # what to do with ckpt_future ?
 
             batch_idx, batch = next(train_iter)
         

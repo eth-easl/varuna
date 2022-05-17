@@ -82,15 +82,18 @@ def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=Non
     if tempdir is not None and len(mv_futures) > 0:
         ckpt_future = executor.submit(future_on_futures, mv_futures, rank, local_rank, 
                         step, epoch, global_store, param_count)
+        print("shutdown executor")
         executor.shutdown(wait = False)
     else:
-        local_tracker = get_local_ckpt_tracker(local_rank)
-        with open(local_tracker,"w") as f:
-            f.write(str(step))
-        global_tracker = get_global_ckpt_tracker(global_store, rank, epoch, step)
-        with open(global_tracker,"w") as f:
-            f.write(str(param_count))
+        if shard:
+            local_tracker = get_local_ckpt_tracker(local_rank)
+            with open(local_tracker,"w") as f:
+                f.write(str(step))
+            global_tracker = get_global_ckpt_tracker(global_store, rank, epoch, step)
+            with open(global_tracker,"w") as f:
+                f.write(str(param_count))
 
+    print("exit")
     return ckpt_future
 
 def checkpoint_model_state_ddp(ordered_params, rank_within_stage, shard, data_depth,
@@ -251,6 +254,12 @@ def future_on_futures(mv_futures, rank, local_rank, iteration, epoch, global_sto
         global_tracker = get_global_ckpt_tracker(global_store, rank, epoch, iteration)
         with open(global_tracker,"w") as f:
             f.write(str(param_count))
+        print("Writing done!")
+
+    if rank==0:
+        # remove files created by older processes, of a different world size
+        pass
+    
 
 def load_varuna_checkpoint(my_stage, num_stages, total_num_pstages, common_store, 
                             pstages_to_read = None, device = 'cpu'):
@@ -313,8 +322,10 @@ def get_local_ckpt_tracker(local_rank):
 
 def get_global_ckpt_tracker(global_store, rank, epoch, step):
     print(f"write markers at {epoch},{step}")
-    return os.path.join(global_store, "varuna_ckpt_{}_{}".format(epoch, step),
+    p = os.path.join(global_store, "varuna_ckpt_{}_{}".format(epoch, step),
                             MARKERS, f"complete_{rank}.txt")
+    print(p)
+    return p
 
 def num_params_written(global_store, step):
     marker_dir = os.path.join(global_store, f"varuna_ckpt_{step}", MARKERS)
@@ -327,6 +338,9 @@ def num_params_written(global_store, step):
 
 def num_params_written_from_filename(filename):
     marker_dir = os.path.join(filename, MARKERS)
+    # if not exist
+    if not os.path.exists(marker_dir):
+        return 0
     markers = os.listdir(marker_dir)
     complete = 0
     for m in markers:
