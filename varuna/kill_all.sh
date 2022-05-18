@@ -8,7 +8,7 @@ do
     echo $i ${machines[i]}
     #ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${machines[i]} "sudo pkill -f varuna.launcher" 
     echo "try to kill"
-    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${machines[i]} "bash /home/fot/varuna/varuna/kill_local.sh"
+    gcloud compute ssh ${machines[i]} --zone us-west1-a --command "bash /home/fot/varuna/varuna/kill_local.sh" -- -o ConnectTimeout=60
 
     i=$(($i+1))
 done

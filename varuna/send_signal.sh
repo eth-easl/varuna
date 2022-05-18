@@ -6,6 +6,6 @@ echo "triggering stop signal"
 i=0
 while [ $i -lt ${#machines[@]} ]
 do
-    ssh ${machines[i]} "kill -10 \$(cat $local_pid_path)"
+    gcloud compute ssh ${machines[i]} --zone us-west1-a --command "kill -10 \$(cat $local_pid_path)"
     i=$(($i+1))
 done

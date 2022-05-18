@@ -174,15 +174,27 @@ if __name__ == "__main__":
             cmd = [x_ for x_ in cmd if x_ != ""]
             # print("launch cmd is ", cmd)
         else:
-            cmd = ["ssh"]
-            cmd.append("-o StrictHostKeyChecking=no")
-            cmd.append(machine)
-            cmd.append(f"echo \"{fuse_cmd} && {launch_cmd}\" > launch_varuna.sh;  ")
-            cmd.append(f"{HEARTBEAT_IP_ENV_VAR}={args.manager_ip}") 
-            cmd.append(f"{MORPH_PORT_ENV_VAR}={MORPH_PORT} {HEARTBEAT_PORT_ENV_VAR}={HEARTBEAT_PORT}")
-            cmd.append(get_env_vars(args.env_file))
-            cmd.append("bash launch_varuna.sh")
-            print(" ".join(cmd ))
+            # cmd = ["ssh"]
+            # cmd.append("-o StrictHostKeyChecking=no")
+            # cmd.append(machine)
+            # cmd.append(f"echo \"{fuse_cmd} && {launch_cmd}\" > launch_varuna.sh;  ")
+            # cmd.append(f"{HEARTBEAT_IP_ENV_VAR}={args.manager_ip}") 
+            # cmd.append(f"{MORPH_PORT_ENV_VAR}={MORPH_PORT} {HEARTBEAT_PORT_ENV_VAR}={HEARTBEAT_PORT}")
+            # cmd.append(get_env_vars(args.env_file))
+            # cmd.append("bash launch_varuna.sh")
+            # print(" ".join(cmd ))
+
+            cmd1 = f"gcloud compute ssh {machine} --zone us-west1-a --command \" echo \' {fuse_cmd} && {launch_cmd}\' > launch_varuna.sh; {HEARTBEAT_IP_ENV_VAR}={args.manager_ip} {MORPH_PORT_ENV_VAR}={MORPH_PORT} {HEARTBEAT_PORT_ENV_VAR}={HEARTBEAT_PORT} {get_env_vars(args.env_file)} bash launch_varuna.sh \" "
+
+            fname = "file"+str(i)+".sh"
+            f = open(fname, 'w')
+            f.write(cmd1+'\n')
+            f.flush()
+
+            cmd = ["bash"]
+            cmd.append(fname)
+
+            print(" ".join(cmd))     
        
         process = subprocess.Popen(cmd, env=current_env, 
                                     stdout=out_file,

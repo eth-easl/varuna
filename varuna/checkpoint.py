@@ -30,6 +30,8 @@ opt_extra_state_name = "opt-common-state"
 """
 def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=None, shard=False, ddp=True):
 
+    print("Entered write_varuna_checkpoint")
+
     optimizer = varuna_model.optimizer
     cp_time = time.time()
     mv_futures = []
@@ -46,7 +48,10 @@ def write_varuna_checkpoint(varuna_model, global_store, epoch, step, tempdir=Non
     pstages = range(cuts_per_stage * stage, (stage+1)* cuts_per_stage)
     data_depth = len(varuna_model.stage_to_rank_map[stage])
 
+    print("About to call create_ckpt_dirs")
+
     cp_dir_name, marker_dir_name = create_ckpt_dirs(global_store, tempdir, rank, local_rank, epoch, step)
+    print("f{About to checkpoint at {cp_dir_name}, {marker_dir_name}}")
         
     ordered_params = list(varuna_model.partitioned_model.module.parameters())   
     ddp_params = varuna_model.partitioned_model.module.state_dict()
@@ -227,11 +232,14 @@ def create_ckpt_dirs(global_store, tempdir, rank, local_rank, epoch, step):
     marker_dir_name = os.path.join(cp_dir_name, MARKERS)
     if rank == 0 and (not os.path.exists(cp_dir_name)):
         os.makedirs(cp_dir_name)
+    if rank==0 and (not os.path.exists(marker_dir_name)):
         os.makedirs(marker_dir_name)
     if local_rank == 0 and (tempdir is not None) and (not os.path.exists(tempdir)):
         os.makedirs(tempdir)
+    print("enter while loop")
     while not os.path.exists(marker_dir_name):
         pass
+    print("exit while loop")
     return cp_dir_name, marker_dir_name
 
 def future_on_futures(mv_futures, rank, local_rank, iteration, epoch, global_store, param_count):

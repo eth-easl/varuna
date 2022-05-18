@@ -28,6 +28,7 @@ import socket
 import math, shutil
 import os, sys
 import time
+from functools import cmp_to_key
 
 Module = nn.Module
 
@@ -35,6 +36,26 @@ log_verbose = False
 
 TASK = ["fwd", "rec", "bwd"]
     
+def compare(a, b):
+        tokens1 = a.split("_")
+        tokens2 = b.split("_")
+
+        ep1 = int(tokens1[-2])
+        it1 = int(tokens1[-1])
+
+        ep2 = int(tokens2[-2])
+        it2 = int(tokens2[-1])
+
+        if ep1 > ep2:
+            return -1
+
+        if ep1==ep2:
+            if it1 > it2:
+                return -1
+
+        return 1
+
+
 class Varuna(Module):
     r"""Module to implement varuna training. The model must be wrapped in an instance 
     of ``Varuna`` before training. This should be done before optimizer creation and the 
@@ -494,6 +515,7 @@ class Varuna(Module):
     def to(self, device):
         self.model.to(device)
 
+
     def preload(self, global_store):
 
         r""" Get the latest *complete* checkpoint from the available
@@ -502,7 +524,10 @@ class Varuna(Module):
         """
         dir_name = global_store+"/"
         list_of_files = filter( os.path.isdir, glob.glob(dir_name + '*'))
-        list_of_files = sorted(list_of_files, key = os.path.getmtime, reverse=True)
+        #list_of_files = sorted(list_of_files, key = os.path.getmtime, reverse=True)
+        
+        list_of_files = list(list_of_files)
+        list_of_files=sorted(list_of_files, key = cmp_to_key(compare))
         print(list_of_files)
 
         num_parameter_instances = len(self.partitioned_model.module.state_dict())

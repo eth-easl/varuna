@@ -16,7 +16,7 @@ parser.add_argument('--zone', default="us-west1-a", type=str, help='Cluster zone
 parser.add_argument('--available_machines_list', default="", type=str, help='File of the available machine IPs')
 parser.add_argument('--running_machines_list', default="", type=str, help='File of the currently running machine IPs')
 parser.add_argument('--simulated_machines_list', default="", type=str, help='File of the simulated machine IPs')
-parser.add_argument('--log-file', default="", type=str, help='File to write the number of available VMs')
+parser.add_argument('--log_file', default="", type=str, help='File to write the number of available VMs')
 
 # cluster = sys.argv[1]
 counter = 0
@@ -38,7 +38,6 @@ def process_response(res, pattern):
             instance_list.append(name)
     return instance_list
 
-
 def get_vm_list(pattern, zone):
 
     command = "gcloud compute instances list"
@@ -47,7 +46,10 @@ def get_vm_list(pattern, zone):
     instance_list = process_response(result, pattern)
     return instance_list
 
-def check_VM_running(name, zone):
+def check_VM_running(name, zone, sim=False):
+    if sim:
+        return True
+
     command = "gcloud compute instances describe "  + name + " --zone " + zone
     result = subprocess.run(command.split(), stdout=subprocess.PIPE).stdout.decode()
     if "RUNNING" in result:
@@ -87,11 +89,9 @@ def poll_and_update(f):
         msg = f"morph {len(new_machines)}"
         client(args.server_ip, args.server_port, msg)
         print(len(new_machines), flush=True)
-
     status = str(time.time()) + "," + str(len(new_machines)) + "\n"
     f.write(status)
     f.flush()
-
 
 def get_current_machines():
     f = open(args.running_machines_list,"r")
@@ -99,20 +99,25 @@ def get_current_machines():
     machines = [m for m in machines if len(m) > 0]
     return machines
 
-def get_avail(vm_list):
+def get_avail(vm_list, get_ip, sim=False):
+
+
     avail_vm_list = []
 
     for x in vm_list:
-        if check_VM_running(x, args.zone):
-            cmd =  "gcloud compute instances describe " + x + " --format get(networkInterfaces[0].networkIP) --zone " + args.zone
-            ip_addr = subprocess.run(cmd.split(), stdout=subprocess.PIPE).stdout.decode()
-            print(ip_addr)
-            avail_vm_list.append(ip_addr)
+        if check_VM_running(x, args.zone, sim):
+            if get_ip:
+                cmd =  "gcloud compute instances describe " + x + " --format get(networkInterfaces[0].networkIP) --zone " + args.zone
+                ip_addr = subprocess.run(cmd.split(), stdout=subprocess.PIPE).stdout.decode()
+                ip_addr = ip_addr.strip()
+                print(ip_addr)
+                avail_vm_list.append(ip_addr)
+            else:
+                avail_vm_list.append(x)
 
-    print(avail_vm_list)
     f = open(args.available_machines_list, 'w')
     for v in avail_vm_list: # TODO: what if someone is reading from this file?
-        f.write(v)
+        f.write(v + "\n")
     f.flush()
     return avail_vm_list
 
@@ -121,12 +126,12 @@ def get_available_machines_sim():
     f = open(args.simulated_machines_list,"r")
     machines = f.read().split("\n")
     machines = [m for m in machines if len(m) > 0]
-    return get_avail(machines)
+    return get_avail(machines, get_ip=False, sim=True)
 
 def get_available_machines():
     vm_list = get_vm_list(pattern, args.zone)
     print(vm_list)
-    return get_avail(vm_list)
+    return get_avail(vm_list, get_ip=False)
 
 def notify():
      f=open(args.log_file, 'w')
