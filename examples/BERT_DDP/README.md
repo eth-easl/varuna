@@ -11,7 +11,13 @@ The script *run_varuna_ddp.sh* pretrains BERT-large on the Wikicorpus dataset as
     * git apply bert.patch
 
 
-2. Download, extract, and preprocess the dataset. There are instructions [here](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/LanguageModeling/BERT#quick-start-guide). This takes a couple of hours, so we have set up a Google Cloud image with the complete dataset.
+2. Download, extract, and preprocess the dataset. There are instructions [here](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/LanguageModeling/BERT#quick-start-guide). This takes a couple of hours, so we have set up a Google Cloud image with the complete dataset ('image-varuna-bert').
+    * If you sant to train without varuna, just create a VM with this image and do:
+        * cd DeepLearningExamples/PyTorch/LanguageModeling/BERT
+        * git apply -R bert.patch
+        * copy the 'run_ddp.sh' in the 'DeepLearningExamples/PyTorch/LanguageModeling/BERT/scripts/' directory
+        * set the correct paths at 'scripts/run_ddp.sh', and number of GPUs
+        * run './scripts/run_ddp.sh'
 
 
 3. Copy the *run_pretraining.py* script in the BERT working folder (it has some minor fixes):
